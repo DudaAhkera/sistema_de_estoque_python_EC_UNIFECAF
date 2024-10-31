@@ -25,6 +25,7 @@ def cadastrar_usuario():
         senha = getpass("Senha: ")
         confirmar_senha = getpass("Confirme a senha: ")
         
+        #verifica se as senhas coincidem
         if senha != confirmar_senha:
             print("As senhas não coincidem. Tente novamente")
             return
