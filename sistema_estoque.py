@@ -20,20 +20,23 @@ def hash_senha(senha):
 def cadastrar_usuario():
     print("\n=== Cadastro de Novo usuário ===")
     username = input("Nome de usuário: ")
-    senha = getpass("Senha: ")
-    confirmar_senha = getpass("Confirme a senha: ")
-    if senha != confirmar_senha:
-        print("As senhas não coincidem. Tente novamente")
-        return
-    perfil = input("Perfil (administrador/comum): ").strip().lower()
-    if perfil not in ['administrador', 'comum']:
-        print("Perfil inválido. Digite 'administrador' ou 'comum': ")
-        return
-    
-    senha_hash = hash_senha(senha)
-    cursor.execute("INSERT INTO usuarios (username, senha, perfil) VALUES (%s, %s, %s )", (username, senha_hash, perfil))
-    conexao.commit()
-    print("Usuário cadastrado com sucesso!")
+    #validacão de senha
+    while True:
+        senha = getpass("Senha: ")
+        confirmar_senha = getpass("Confirme a senha: ")
+        
+        if senha != confirmar_senha:
+            print("As senhas não coincidem. Tente novamente")
+            return
+        perfil = input("Perfil (administrador/comum): ").strip().lower()
+        if perfil not in ['administrador', 'comum']:
+            print("Perfil inválido. Digite 'administrador' ou 'comum': ")
+            return
+
+        senha_hash = hash_senha(senha)
+        cursor.execute("INSERT INTO usuarios (username, senha, perfil) VALUES (%s, %s, %s )", (username, senha_hash, perfil))
+        conexao.commit()
+        print("Usuário cadastrado com sucesso!")
 
 #funcão para realizar login do usuário
 def login():
