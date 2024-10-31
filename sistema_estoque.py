@@ -21,6 +21,7 @@ def hash_senha(senha):
 def cadastrar_usuario():
     print("\n=== Cadastro de Novo usuário ===")
     username = input("Nome de usuário: ")
+    print("Para cadastrar a senha é necessário ter 6 caracteres e pelo menos 1 número")
     #validacão de senha
     while True:
         senha = getpass("Senha: ")
