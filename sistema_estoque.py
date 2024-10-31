@@ -1,6 +1,7 @@
 import mysql.connector
 import hashlib
 from getpass import getpass
+import re
 
 #configuracão de conexão com o banco de dados
 conexao = mysql.connector.connect(
@@ -28,16 +29,25 @@ def cadastrar_usuario():
         #verifica se as senhas coincidem.
         if senha != confirmar_senha:
             print("As senhas não coincidem. Tente novamente")
-            return
-        perfil = input("Perfil (administrador/comum): ").strip().lower()
-        if perfil not in ['administrador', 'comum']:
-            print("Perfil inválido. Digite 'administrador' ou 'comum': ")
-            return
-
-        senha_hash = hash_senha(senha)
-        cursor.execute("INSERT INTO usuarios (username, senha, perfil) VALUES (%s, %s, %s )", (username, senha_hash, perfil))
-        conexao.commit()
-        print("Usuário cadastrado com sucesso!")
+            continue
+        #verifica se a senha tem 6 caracteres
+        if len(senha) < 6 and len(senha) > 6:
+            print("A senha deve ter 6 caracteres, tente novamente!")
+            continue
+        if not re.search(r"\d", senha):
+            print("A senha deve conter pelo menos  1 número. Tente novamente")
+            continue
+        break
+    
+    perfil = input("Perfil (administrador/comum): ").strip().lower()
+    if perfil not in ['administrador', 'comum']:
+        print("Perfil inválido. Digite 'administrador' ou 'comum': ")
+        return
+    
+    senha_hash = hash_senha(senha)
+    cursor.execute("INSERT INTO usuarios (username, senha, perfil) VALUES (%s, %s, %s )", (username, senha_hash, perfil))
+    conexao.commit()
+    print("Usuário cadastrado com sucesso!")
 
 #funcão para realizar login do usuário
 def login():
