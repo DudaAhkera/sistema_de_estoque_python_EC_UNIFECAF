@@ -21,7 +21,7 @@ def hash_senha(senha):
 def cadastrar_usuario():
     print("\n=== Cadastro de Novo usuário ===")
     username = input("Nome de usuário: ")
-    print("Para cadastrar a senha é necessário ter 6 caracteres e pelo menos 1 número")
+    print("Para cadastrar a senha é necessário ter 4 caracteres e pelo menos 1 número")
     #validacão de senha
     while True:
         senha = getpass("Senha: ")
@@ -31,7 +31,7 @@ def cadastrar_usuario():
         if senha != confirmar_senha:
             print("As senhas não coincidem. Tente novamente")
             continue
-        #verifica se a senha tem 6 caracteres
+        #verifica se a senha tem 4 caracteres
         if len(senha) > 4:
             print("A senha deve ter 4 caracteres, tente novamente!")
             continue
@@ -72,7 +72,36 @@ def cadastrar_produto():
                    (nome, quantidade, quantidade_minima))
     conexao.commit()
     print(f"Produto '{nome}' cadastro com sucesso!")
+
+#Funcão para registrar saída de produtos
+def saida_produtos():
+    print("\n=== Saída de produto ===")
+    nome = input("Nome do produto para dar saída: ")
+    quantidade_saida = int(input("Quantidade de saída: "))
     
+    #verifica a quantidade em estoque
+    cursor.execute("SELECT quantidade, quantidade_minima FROM produtos WHERE nome = %s", (nome,))
+    produto = cursor.fetchone()
+    
+    if produto is None:
+        print("Produto não encontrado!")
+        return
+    
+    quantidade_atual, quantidade_minima = produto
+    if quantidade_saida > quantidade_atual:
+        print("Quantidade insuficiente no estoque para a saída solicitada.")
+        return
+    
+    #Atualiza a quantidade no banco de dados
+    nova_quantidade = quantidade_atual - quantidade_saida
+    cursor.execute("UPDATE produtos SET quantidade = %s", (nova_quantidade, nome))
+    conexao.commit()
+    print(f"Saída de {quantidade_saida} unidades de '{nome}' registrada com sucesso!")
+    
+    #Exibe alerta se a quantidade estiver abaixo do mínimo
+    if nova_quantidade < quantidade_minima:
+        print("ALERTA: Quantidade de '{nome}' está abaixo do mínimo permitido. Considere reabastecer.")
+   
 #funcão para listar produtos e alertas sobre baixa qualidade
 def listar_produtos():
     print("\n=== Produtos em estoque ===")
@@ -104,9 +133,10 @@ def sistema_estoque():
     while True:
         print("\n=== Menu ===")
         print("\n===1. Cadastrar produto ===")
-        print("\n===2. Listar produtos ===")
+        print("\n===2. Listar produto ===")
+        print("\n===3. Sáda de produto ===")
         if eh_administrador:
-            print("\n===3. Cadastrar novo usuário ===")
+            print("\n===4. Cadastrar novo usuário ===")
         print("0. Sair")
         
         opcao = input("Escolha uma opcão: ").strip()
@@ -114,7 +144,9 @@ def sistema_estoque():
             cadastrar_produto()
         elif opcao == "2":
             listar_produtos()
-        elif opcao == "3" and eh_administrador:
+        elif opcao == "3":
+            saida_produtos
+        elif opcao == "4" and eh_administrador:
             cadastrar_usuario()
         elif opcao == "0":
             print("Saindo do sistema...")
