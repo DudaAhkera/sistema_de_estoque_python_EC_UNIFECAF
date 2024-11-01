@@ -32,11 +32,8 @@ def cadastrar_usuario():
             print("As senhas não coincidem. Tente novamente")
             continue
         #verifica se a senha tem 6 caracteres
-        if len(senha) < 6 and len(senha) > 6:
-            print("A senha deve ter 6 caracteres, tente novamente!")
-            continue
-        if not re.search(r"\d", senha):
-            print("A senha deve conter pelo menos  1 número. Tente novamente")
+        if len(senha) > 4:
+            print("A senha deve ter 4 caracteres, tente novamente!")
             continue
         break
     
