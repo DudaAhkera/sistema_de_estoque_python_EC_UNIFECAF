@@ -176,12 +176,12 @@ def sistema_estoque():
     #Menu de opcões do sistema
     while True:
         print("\n=== Menu ===")
-        print("\n===1. Cadastrar produto ===")
-        print("\n===2. Listar produto ===")
-        print("\n===3. Saída de produto ===")
+        print("\n=== 1. Cadastrar produto ===")
+        print("\n=== 2. Listar produto ===")
+        print("\n=== 3. Saída de produto ===")
         if eh_administrador:
             print("\n===4. Cadastrar novo usuário ===")
-        print("0. Sair")
+        print("=== 0. Sair ===")
         
         opcao = input("Escolha uma opcão: ").strip()
         if opcao == "1":
