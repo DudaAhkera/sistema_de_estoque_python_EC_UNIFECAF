@@ -1,7 +1,8 @@
 import mysql.connector
 import hashlib
 from getpass import getpass
-import re
+import tkinter as tk
+from tkinter import messagebox, simpledialog
 
 #configuracão de conexão com o banco de dados
 conexao = mysql.connector.connect(
