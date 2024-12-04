@@ -22,7 +22,7 @@ def criar_conexao():
 #funcao de interface gráfica
 def interface_grafica(funcao, **kwargs):
     #criar janela oculta para diálogo
-    root = tk.tk()
+    root = tk.Tk()
     root.withdraw() #oculta a janela principal
     
     try:
@@ -61,15 +61,15 @@ def obter_senha():
         senha = getpass("Senha: ")
         confirmar_senha = getpass("Confirme a senha: ")
         
-    #verifica se as senhas coincidem.
-    if senha != confirmar_senha:
-        print("As senhas não coincidem. Tente novamente")
-        continue
-    #verifica se a senha tem 4 caracteres
-    if len(senha) < 4 && len(senha) > 4:
-        print("A senha deve ter 4 caracteres, tente novamente!")
-        continue
-    return senha
+        #verifica se as senhas coincidem.
+        if senha != confirmar_senha:
+            print("As senhas não coincidem. Tente novamente")
+            continue
+        #verifica se a senha tem 4 caracteres
+        if len(senha) != 4:
+            print("A senha deve ter 4 caracteres, tente novamente!")
+            continue
+        return senha
     
     #solicita o perfil do usuário
 def obter_perfil(): 
@@ -79,10 +79,10 @@ def obter_perfil():
             return perfil
         else:
             print("Perfil inválido. Digite 'administrador' ou 'comum': ")
-            return
+            continue
 
 #funcão para realizar login do usuário
-def login():
+def login(cursor):
     print("\n=== Login ===")
     username = input("Usuário: ")
     senha = getpass("Senha: ")
@@ -114,23 +114,13 @@ def cadastrar_produto(cursor):
 def obter_quantidade(mensagem):
     while True:
         try:
-            quantidade = (input(mensagem))
+            quantidade = int(input(mensagem))
             if quantidade < 0:
                 print("A quantidade inicial não pode ser negativa")
                 continue
             return quantidade
         except ValueError:
             print("Por favor, insira um número válido para a quantidade")
-    
-   # while True:
-   #     try:
-   #         quantidade_minima = int(input("Quantidade minima: "))
-   #         if quantidade_minima < 0:
-   #             print("A quantidade mínima não pode ser negativa.")
-   #             continue
-   #         break
-   #     except ValueError:
-   #         print("Por favor, insira um número válido para a quantidade mínima")
 
 #Funcão para registrar saída de produtos
 def saida_produtos(cursor):
@@ -162,17 +152,10 @@ def saida_produtos(cursor):
     #Exibe alerta se a quantidade estiver abaixo do mínimo
     if nova_quantidade < quantidade_minima:
         print(f"Quantidade de '{nome}' está abaixo do mínimo permitido.")
-
-            
-    #Atualiza a quantidade no banco de dados
-    nova_quantidade = quantidade_atual - quantidade_saida
-    cursor.execute("UPDATE produtos SET quantidade = %s WHERE nome = %s", (nova_quantidade, nome))
-    conexao.commit()
-    print(f"Saída de {quantidade_saida} unidades de '{nome}' registrada com sucesso!")
     
    
 #funcão para listar produtos e alertas sobre baixa qualidade
-def listar_produtos():
+def listar_produtos(cursor):
     print("\n=== Produtos em estoque ===")
     cursor.execute("SELECT nome, quantidade, quantidade_minima FROM produtos")
     produtos = cursor.fetchall()
@@ -189,7 +172,7 @@ def listar_produtos():
 def sistema_estoque():
     print("Bem-vindo(a) ao sistema de estoque.")
     
-    cursor = criar_conexao()
+    conexao = criar_conexao()
     if not conexao:
         return
     
@@ -199,7 +182,7 @@ def sistema_estoque():
     cursor.execute("SELECT COUNT(*) FROM usuarios")
     if cursor.fetchone()[0] == 0:
         print("Nenhum usuário encontrado. Crie um administrador inicial.")
-        cadastrar_usuario()
+        cadastrar_usuario(cursor)
         
     #Login do usuário
     usuario = None
@@ -221,13 +204,13 @@ def sistema_estoque():
         
         opcao = input("Escolha uma opcão: ").strip()
         if opcao == "1":
-            interface_grafica(cadastrar_produto)
+            interface_grafica(cadastrar_produto, cursor = cursor)
         elif opcao == "2":
-            interface_grafica(listar_produtos)
+            interface_grafica(listar_produtos, cursor = cursor)
         elif opcao == "3":
-            interface_grafica(saida_produtos)
+            interface_grafica(saida_produtos, cursor = cursor)
         elif opcao == "4" and eh_administrador:
-            interface_grafica(cadastrar_usuario)
+            interface_grafica(cadastrar_usuario, cursor = cursor)
         elif opcao == "0":
             print("Saindo do sistema...")
             break
