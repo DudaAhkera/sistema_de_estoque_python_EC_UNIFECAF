@@ -6,14 +6,18 @@ from tkinter import messagebox, simpledialog
 import os
 
 #configuracão de conexão com o banco de dados
-conexao = mysql.connector.connect(
-    host='127.0.0.1',
-    user='root',
-    password='Zulenice20@',
-    database='sistema_estoque'
-)
-
-cursor = conexao.cursor()
+def criar_conexao():
+    try:
+        conexao = mysql.connector.connect(
+            host='127.0.0.1',
+            user='root',
+            password=os.getenv('MYSQL_PASSWORD', 'Zulenice20@'),
+            database='sistema_estoque'
+        )
+        return conexao
+    except mysql.connector.Error as e:
+        print(f"Erro de conexão: {e}")
+        return None
 
 #funcao de interface gráfica
 def interface_grafica(funcao, **kwargs):
@@ -35,44 +39,47 @@ def hash_senha(senha):
     return hashlib.sha256(senha.encode()).hexdigest()
 
 #funcão para cadastrar um novo usuário (somente para administradores)
-def cadastrar_usuario():
+def cadastrar_usuario(cursor):
     print("\n=== Cadastro de Novo usuário ===")
     username = input("Nome de usuário: ")
     print("Para cadastrar a senha é necessário ter 4 caracteres e pelo menos 1 número")
     
+    senha = obter_senha()
+    perfil = obter_perfil()
+    senha_hash = hash_senha(senha)
+
+    try:
+        cursor.execute("INSERT INTO usuarios (username, senha, perfil) VALUES (%s, %s, %s )", (username, senha_hash, perfil))
+        cursor.connection.commit()
+        print("Usuário cadastrado com sucesso!")
+    except mysql.connector.Error as e:
+        print(f"Erro ao cadastrar usuário: {e}")
+        
+def obter_senha():
     #validacão de senha
     while True:
         senha = getpass("Senha: ")
         confirmar_senha = getpass("Confirme a senha: ")
         
-        #verifica se as senhas coincidem.
-        if senha != confirmar_senha:
-            print("As senhas não coincidem. Tente novamente")
-            continue
-        #verifica se a senha tem 4 caracteres
-        if len(senha) > 4:
-            print("A senha deve ter 4 caracteres, tente novamente!")
-            continue
-        break
+    #verifica se as senhas coincidem.
+    if senha != confirmar_senha:
+        print("As senhas não coincidem. Tente novamente")
+        continue
+    #verifica se a senha tem 4 caracteres
+    if len(senha) < 4 && len(senha) > 4:
+        print("A senha deve ter 4 caracteres, tente novamente!")
+        continue
+    return senha
     
     #solicita o perfil do usuário
+def obter_perfil(): 
     while True:
-        
         perfil = input("Perfil (administrador/comum): ").strip().lower()
         if perfil in ['administrador', 'comum']:
-            break
+            return perfil
         else:
             print("Perfil inválido. Digite 'administrador' ou 'comum': ")
             return
-    
-    #criptografa a senha e insere o usuário no banco de dados
-    senha_hash = hash_senha(senha)
-    try:
-        cursor.execute("INSERT INTO usuarios (username, senha, perfil) VALUES (%s, %s, %s )", (username, senha_hash, perfil))
-        conexao.commit()
-        print("Usuário cadastrado com sucesso!")
-    except mysql.connector.Error as err:
-        print(f"Erro ao cadastrar usuário: {err}")
 
 #funcão para realizar login do usuário
 def login():
@@ -90,36 +97,43 @@ def login():
         return None
     
 #funcão para cadastrar produtos no estoque
-def cadastrar_produto():
+def cadastrar_produto(cursor):
     print("\n=== Cadastro de Produto ===")
     nome = input("Nome do produto: ")
-    while True:
-        try:
-            quantidade = int(input("Quantidade inicial: "))
-            if quantidade < 0:
-                print("A quantidade inicial não pode ser negativa")
-                continue
-            break
-        except ValueError:
-            print("Por favor, insira um número válido para a quantidade")
-    
-    while True:
-        try:
-            quantidade_minima = int(input("Quantidade minima: "))
-            if quantidade_minima < 0:
-                print("A quantidade mínima não pode ser negativa.")
-                continue
-            break
-        except ValueError:
-            print("Por favor, insira um número válido para a quantidade mínima")
+
+    quantidade = obter_quantidade("Quantidade inicial: ")
+
+    quantidade_minima = obter_quantidade("Quantidade minima: ")
             
     cursor.execute("INSERT INTO produtos (nome, quantidade, quantidade_minima) VALUES (%s, %s, %s)",
                    (nome, quantidade, quantidade_minima))
-    conexao.commit()
+    cursor.connection.commit()
     print(f"Produto '{nome}' cadastro com sucesso!")
 
+# Obter quantidade com validacão 
+def obter_quantidade(mensagem):
+    while True:
+        try:
+            quantidade = (input(mensagem))
+            if quantidade < 0:
+                print("A quantidade inicial não pode ser negativa")
+                continue
+            return quantidade
+        except ValueError:
+            print("Por favor, insira um número válido para a quantidade")
+    
+   # while True:
+   #     try:
+   #         quantidade_minima = int(input("Quantidade minima: "))
+   #         if quantidade_minima < 0:
+   #             print("A quantidade mínima não pode ser negativa.")
+   #             continue
+   #         break
+   #     except ValueError:
+   #         print("Por favor, insira um número válido para a quantidade mínima")
+
 #Funcão para registrar saída de produtos
-def saida_produtos():
+def saida_produtos(cursor):
     print("\n=== Saída de produto ===")
     nome = input("Nome do produto para dar saída: ")
     
@@ -134,29 +148,28 @@ def saida_produtos():
     quantidade_atual, quantidade_minima = produto
     print(f"Quantidade atual de '{nome}': {quantidade_atual}")
     
-    while True:
-        try:
-            quantidade_saida = int(input("Quantidade de saída: "))
-            if quantidade_saida <= 0:
-                print("A quantidade de saída deve ser positiva")
-                continue
-            break
-        except ValueError:
-            print("Por favor, insira um número válido para a quantidade de saída")
-            
+    quantidade_saida = obter_quantidade("Quantidade de saída: ")
+    
     if quantidade_saida > quantidade_atual:
         print("Quantidade insuficiente no estoque para a saída solicitada.")
         return
+        
+    nova_quantidade = quantidade_atual - quantidade_saida
+    cursor.execute("UPDATE produtos SET quantidade = %s WHERE nome = %s", (nova_quantidade, nome))
+    cursor.connection.commit()
+    print(f"Saída de {quantidade_saida} unidades de '{nome}' registrada com sucesso!")
     
+    #Exibe alerta se a quantidade estiver abaixo do mínimo
+    if nova_quantidade < quantidade_minima:
+        print(f"Quantidade de '{nome}' está abaixo do mínimo permitido.")
+
+            
     #Atualiza a quantidade no banco de dados
     nova_quantidade = quantidade_atual - quantidade_saida
     cursor.execute("UPDATE produtos SET quantidade = %s WHERE nome = %s", (nova_quantidade, nome))
     conexao.commit()
     print(f"Saída de {quantidade_saida} unidades de '{nome}' registrada com sucesso!")
     
-    #Exibe alerta se a quantidade estiver abaixo do mínimo
-    if nova_quantidade < quantidade_minima:
-        print(f"ALERTA: Quantidade de '{nome}' está abaixo do mínimo permitido. Considere reabastecer.")
    
 #funcão para listar produtos e alertas sobre baixa qualidade
 def listar_produtos():
@@ -176,6 +189,12 @@ def listar_produtos():
 def sistema_estoque():
     print("Bem-vindo(a) ao sistema de estoque.")
     
+    cursor = criar_conexao()
+    if not conexao:
+        return
+    
+    cursor = conexao.cursor()
+    
     #verificar se há usuários; se não, criar um administrador inicial
     cursor.execute("SELECT COUNT(*) FROM usuarios")
     if cursor.fetchone()[0] == 0:
@@ -185,7 +204,7 @@ def sistema_estoque():
     #Login do usuário
     usuario = None
     while not usuario:
-        usuario = login()
+        usuario = login(cursor)
         
     #verificar se o usuário é administrador
     eh_administrador = usuario['perfil'] == 'administrador'
@@ -214,12 +233,13 @@ def sistema_estoque():
             break
         else:
             print("Opcão inválida. Tente novamente.")
-            
+
+    #Fechar a conexão com o banco de dados
+    cursor.close()
+    conexao.close()
+    
 #Executar o sistema
 sistema_estoque()
-
-#Fechar a conexão com o banco de dados
-conexao.close()
 
             
             
