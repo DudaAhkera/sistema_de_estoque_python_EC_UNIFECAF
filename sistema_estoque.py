@@ -3,6 +3,7 @@ import hashlib
 from getpass import getpass
 import tkinter as tk
 from tkinter import messagebox, simpledialog
+import os
 
 #configuracão de conexão com o banco de dados
 conexao = mysql.connector.connect(
@@ -13,6 +14,21 @@ conexao = mysql.connector.connect(
 )
 
 cursor = conexao.cursor()
+
+#funcao de interface gráfica
+def interface_grafica(funcao, **kwargs):
+    #criar janela oculta para diálogo
+    root = tk.tk()
+    root.withdraw() #oculta a janela principal
+    
+    try:
+        resultado = funcao(**kwargs)
+        if resultado:
+            messagebox.showinfo("Sucesso", resultado)
+    except Exception as e:
+        messagebox.showerror("Erro", str(e))
+    finally:
+        root.destroy() #fecha a janela oculta
 
 #funcão para criptografar a senha
 def hash_senha(senha):
@@ -186,13 +202,13 @@ def sistema_estoque():
         
         opcao = input("Escolha uma opcão: ").strip()
         if opcao == "1":
-            cadastrar_produto()
+            interface_grafica(cadastrar_produto)
         elif opcao == "2":
-            listar_produtos()
+            interface_grafica(listar_produtos)
         elif opcao == "3":
-            saida_produtos()
+            interface_grafica(saida_produtos)
         elif opcao == "4" and eh_administrador:
-            cadastrar_usuario()
+            interface_grafica(cadastrar_usuario)
         elif opcao == "0":
             print("Saindo do sistema...")
             break
