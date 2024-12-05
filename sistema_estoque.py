@@ -85,8 +85,9 @@ class SistemaEstoque:
         if self.perfil_atual == "administrador":
             tk.Button(self.root, text="Cadastrar Usuário", command=self.cadastrar_usuario).pack(fill="x", padx=20, pady=5)
         tk.Button(self.root, text="Listar Produtos", command=self.listar_produtos).pack(fill="x", padx=20, pady=5)
+        tk.Button(self.root, text="Dar Saída de Produto", command=self.dar_saida_produto).pack(fill="x", padx=20, pady=5)
         tk.Button(self.root, text="Sair", command=self.tela_login).pack(fill="x", padx=20, pady=5)
-
+    
     # Cadastro de produto
     def cadastrar_produto(self):
         janela = tk.Toplevel(self.root)
@@ -134,61 +135,89 @@ class SistemaEstoque:
                 messagebox.showerror("Erro", f"Erro ao cadastrar produto: {e}")
 
         tk.Button(janela, text="Salvar", command=salvar_produto).grid(row=3, column=0, columnspan=2, pady=10)
+    
     # Adicionando função de saída de produtos
-def dar_saida_produto(self):
-    janela = tk.Toplevel(self.root)
-    janela.title("Dar Saída de Produto")
+    def dar_saida_produto(self):
+        janela = tk.Toplevel(self.root)
+        janela.title("Saída de Produto")
 
-    tk.Label(janela, text="Nome do Produto:").grid(row=0, column=0, padx=10, pady=5)
-    nome_var = tk.StringVar()
-    tk.Entry(janela, textvariable=nome_var).grid(row=0, column=1, padx=10, pady=5)
+        tk.Label(janela, text="Nome do Produto:").grid(row=0, column=0, padx=10, pady=5)
+        nome_var = tk.StringVar()
+        tk.Entry(janela, textvariable=nome_var).grid(row=0, column=1, padx=10, pady=5)
 
-    tk.Label(janela, text="Quantidade:").grid(row=1, column=0, padx=10, pady=5)
-    quantidade_var = tk.StringVar()
-    tk.Entry(janela, textvariable=quantidade_var).grid(row=1, column=1, padx=10, pady=5)
+        tk.Label(janela, text="Quantidade:").grid(row=1, column=0, padx=10, pady=5)
+        quantidade_var = tk.StringVar()
+        tk.Entry(janela, textvariable=quantidade_var).grid(row=1, column=1, padx=10, pady=5)
 
-    def registrar_saida():
-        nome = nome_var.get().strip()
-        quantidade_saida = quantidade_var.get().strip()
+        def registrar_saida():
+            nome = nome_var.get().strip()
+            quantidade_saida = quantidade_var.get().strip()
 
-        if not nome or not quantidade_saida:
-            messagebox.showerror("Erro", "Preencha todos os campos.")
-            return
-
-        try:
-            quantidade_saida = int(quantidade_saida)
-            if quantidade_saida <= 0:
-                raise ValueError
-        except ValueError:
-            messagebox.showerror("Erro", "A quantidade deve ser um número inteiro positivo.")
-            return
-
-        try:
-            self.cursor.execute("SELECT quantidade FROM produtos WHERE nome = %s", (nome,))
-            produto = self.cursor.fetchone()
-
-            if not produto:
-                messagebox.showerror("Erro", "Produto não encontrado.")
+            if not nome or not quantidade_saida:
+                messagebox.showerror("Erro", "Preencha todos os campos.")
                 return
 
-            quantidade_atual = produto[0]
-
-            if quantidade_saida > quantidade_atual:
-                messagebox.showerror("Erro", "Quantidade em estoque insuficiente.")
+            try:
+                quantidade_saida = int(quantidade_saida)
+                if quantidade_saida <= 0:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("Erro", "A quantidade deve ser um número inteiro positivo.")
                 return
 
-            nova_quantidade = quantidade_atual - quantidade_saida
-            self.cursor.execute(
-                "UPDATE produtos SET quantidade = %s WHERE nome = %s",
-                (nova_quantidade, nome)
-            )
-            self.conexao.commit()
-            messagebox.showinfo("Sucesso", f"Saída registrada! Nova quantidade de '{nome}': {nova_quantidade}")
-            janela.destroy()
+            try:
+                self.cursor.execute("SELECT quantidade FROM produtos WHERE nome = %s", (nome,))
+                produto = self.cursor.fetchone()
+
+                if not produto:
+                    messagebox.showerror("Erro", "Produto não encontrado.")
+                    return
+
+                quantidade_atual = produto[0]
+
+                if quantidade_saida > quantidade_atual:
+                    messagebox.showerror("Erro", "Quantidade em estoque insuficiente.")
+                    return
+
+                nova_quantidade = quantidade_atual - quantidade_saida
+                self.cursor.execute(
+                    "UPDATE produtos SET quantidade = %s WHERE nome = %s",
+                    (nova_quantidade, nome)
+                )
+                self.conexao.commit()
+                messagebox.showinfo("Sucesso", f"Saída registrada! Nova quantidade de '{nome}': {nova_quantidade}")
+                janela.destroy()
+            except mysql.connector.Error as e:
+                messagebox.showerror("Erro", f"Erro ao registrar saída: {e}")
+
+        tk.Button(janela, text="Registrar Saída", command=registrar_saida).grid(row=2, column=0, columnspan=2, pady=10)
+    
+        # Listagem de produtos
+    def listar_produtos(self):
+        janela = tk.Toplevel(self.root)
+        janela.title("Produtos em Estoque")
+
+        # Criação do Treeview para exibir os produtos
+        tree = ttk.Treeview(janela, columns=("nome", "quantidade", "quantidade_minima"), show="headings")
+        tree.heading("nome", text="Nome")
+        tree.heading("quantidade", text="Quantidade")
+        tree.heading("quantidade_minima", text="Quantidade Mínima")
+
+        tree.column("nome", width=200)
+        tree.column("quantidade", width=100, anchor="center")
+        tree.column("quantidade_minima", width=150, anchor="center")
+
+        tree.pack(expand=True, fill="both")
+
+        # Populando o Treeview com dados do banco
+        try:
+            self.cursor.execute("SELECT nome, quantidade, quantidade_minima FROM produtos")
+            produtos = self.cursor.fetchall()
+
+            for nome, quantidade, quantidade_minima in produtos:
+                tree.insert("", "end", values=(nome, quantidade, quantidade_minima))
         except mysql.connector.Error as e:
-            messagebox.showerror("Erro", f"Erro ao registrar saída: {e}")
-
-    tk.Button(janela, text="Registrar Saída", command=registrar_saida).grid(row=2, column=0, columnspan=2, pady=10)
+            messagebox.showerror("Erro", f"Erro ao listar produtos: {e}")
     
     # Cadastro de usuário (somente administrador)
     def cadastrar_usuario(self):
@@ -233,21 +262,6 @@ def dar_saida_produto(self):
                 messagebox.showerror("Erro", f"Erro ao cadastrar usuário: {e}")
 
         tk.Button(janela, text="Salvar", command=salvar_usuario).grid(row=3, column=0, columnspan=2, pady=10)
-
-    # Listagem de produtos
-    def listar_produtos(self):
-        janela = tk.Toplevel(self.root)
-        janela.title("Produtos em Estoque")
-
-        texto = tk.Text(janela, wrap="word")
-        texto.pack(expand=True, fill="both")
-
-        self.cursor.execute("SELECT nome, quantidade, quantidade_minima FROM produtos")
-        produtos = self.cursor.fetchall()
-
-        for nome, quantidade, quantidade_minima in produtos:
-            alerta = " - ALERTA: Estoque baixo!" if quantidade < quantidade_minima else ""
-            texto.insert(tk.END, f"{nome}: {quantidade} unidades (Min: {quantidade_minima}){alerta}\n")
 
 # Execução do sistema
 if __name__ == "__main__":
