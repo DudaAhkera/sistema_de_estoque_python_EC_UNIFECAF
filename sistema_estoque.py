@@ -82,10 +82,11 @@ class SistemaEstoque:
 
         tk.Label(self.root, text=f"Bem-vindo, {self.usuario_atual}", font=("Arial", 16)).pack(pady=10)
         tk.Button(self.root, text="Cadastrar Produto", command=self.cadastrar_produto).pack(fill="x", padx=20, pady=5)
-        if self.perfil_atual == "administrador":
-            tk.Button(self.root, text="Cadastrar Usuário", command=self.cadastrar_usuario).pack(fill="x", padx=20, pady=5)
         tk.Button(self.root, text="Listar Produtos", command=self.listar_produtos).pack(fill="x", padx=20, pady=5)
         tk.Button(self.root, text="Dar Saída de Produto", command=self.dar_saida_produto).pack(fill="x", padx=20, pady=5)
+        if self.perfil_atual == "administrador":
+            tk.Button(self.root, text="Cadastrar Usuário", command=self.cadastrar_usuario).pack(fill="x", padx=20, pady=5)
+            tk.Button(self.root, text="Listar Usuário", command=self.listar_usuarios).pack(fill="x", padx=20, pady=5)
         tk.Button(self.root, text="Sair", command=self.tela_login).pack(fill="x", padx=20, pady=5)
     
     # Cadastro de produto
@@ -262,6 +263,65 @@ class SistemaEstoque:
                 messagebox.showerror("Erro", f"Erro ao cadastrar usuário: {e}")
 
         tk.Button(janela, text="Salvar", command=salvar_usuario).grid(row=3, column=0, columnspan=2, pady=10)
+
+
+    # Listar e gerenciar usuários (somente para administradores)
+    def listar_usuarios(self):
+        if self.perfil_atual != "administrador":
+            messagebox.showerror("Erro", "Apenas administradores podem acessar essa funcionalidade.")
+            return
+
+        janela = tk.Toplevel(self.root)
+        janela.title("Usuários Cadastrados")
+
+        # Criação do Treeview para exibir os usuários
+        tree = ttk.Treeview(janela, columns=("username", "perfil"), show="headings")
+        tree.heading("username", text="Usuário")
+        tree.heading("perfil", text="Perfil")
+
+        tree.column("username", width=200)
+        tree.column("perfil", width=100, anchor="center")
+
+        tree.pack(expand=True, fill="both", padx=10, pady=10)
+
+        # Populando o Treeview com dados do banco
+        try:
+            self.cursor.execute("SELECT username, perfil FROM usuarios")
+            usuarios = self.cursor.fetchall()
+
+            for username, perfil in usuarios:
+                tree.insert("", "end", values=(username, perfil))
+        except mysql.connector.Error as e:
+            messagebox.showerror("Erro", f"Erro ao listar usuários: {e}")
+
+        # Função para excluir usuário
+        def excluir_usuario():
+            selecionado = tree.selection()
+            if not selecionado:
+                messagebox.showerror("Erro", "Selecione um usuário para excluir.")
+                return
+
+            username = tree.item(selecionado[0], "values")[0]
+            if username == self.usuario_atual:
+                messagebox.showerror("Erro", "Você não pode excluir seu próprio usuário.")
+                return
+
+            confirmacao = messagebox.askyesno("Confirmação", f"Tem certeza que deseja excluir o usuário '{username}'?")
+            if confirmacao:
+                try:
+                    self.cursor.execute("DELETE FROM usuarios WHERE username = %s", (username,))
+                    self.conexao.commit()
+                    tree.delete(selecionado)
+                    messagebox.showinfo("Sucesso", f"Usuário '{username}' excluído com sucesso!")
+                except mysql.connector.Error as e:
+                    messagebox.showerror("Erro", f"Erro ao excluir usuário: {e}")
+
+        # Botão para excluir usuário
+        tk.Button(janela, text="Excluir Usuário", command=excluir_usuario).pack(pady=10)
+
+        # Adicionar botão na tela principal para listar usuários
+        if self.perfil_atual == "administrador":
+            tk.Button(self.root, text="Listar Usuários", command=self.listar_usuarios).pack(fill="x", padx=20, pady=5)
 
 # Execução do sistema
 if __name__ == "__main__":
