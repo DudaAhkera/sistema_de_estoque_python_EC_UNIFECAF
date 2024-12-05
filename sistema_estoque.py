@@ -40,9 +40,9 @@ def hash_senha(senha):
 
 #funcão para cadastrar um novo usuário (somente para administradores)
 def cadastrar_usuario(cursor):
-    print("\n=== Cadastro de Novo usuário ===")
-    username = input("Nome de usuário: ")
-    print("Para cadastrar a senha é necessário ter 4 caracteres e pelo menos 1 número")
+    username = simpledialog.askstring("Cadastro", "Nome de usuário:")
+    if not username:
+        raise ValueError("Nome de usuário é obrigatório")
     
     senha = obter_senha()
     perfil = obter_perfil()
@@ -58,120 +58,113 @@ def cadastrar_usuario(cursor):
 def obter_senha():
     #validacão de senha
     while True:
-        senha = getpass("Senha: ")
-        confirmar_senha = getpass("Confirme a senha: ")
+        senha = simpledialog.askstring("Cadastro", "Senha:", show="*")
+        confirmar_senha = simpledialog.askstring("Cadastro", "Confirme a senha:", show="*")
         
         #verifica se as senhas coincidem.
         if senha != confirmar_senha:
             print("As senhas não coincidem. Tente novamente")
             continue
         #verifica se a senha tem 4 caracteres
-        if len(senha) != 4:
-            print("A senha deve ter 4 caracteres, tente novamente!")
+        if len(senha) != 4 or not any(char.isdigit() for char in senha):
+            messagebox.showwarning("A senha deve ter 4 caracteres, tente novamente!")
             continue
         return senha
     
     #solicita o perfil do usuário
 def obter_perfil(): 
     while True:
-        perfil = input("Perfil (administrador/comum): ").strip().lower()
+        perfil = simpledialog.askstring("Cadastro", "Perfil (administrador/comum):").strip().lower()
         if perfil in ['administrador', 'comum']:
             return perfil
         else:
-            print("Perfil inválido. Digite 'administrador' ou 'comum': ")
-            continue
+            messagebox.showwarning("Erro", "Perfil inválido. Digite 'administrador' ou 'comum'.")
 
 #funcão para realizar login do usuário
 def login(cursor):
-    print("\n=== Login ===")
-    username = input("Usuário: ")
-    senha = getpass("Senha: ")
+    username = simpledialog.askstring("Login", "Usuário:")
+    senha = simpledialog.askstring("Login", "Senha:", show="*")
     senha_hash = hash_senha(senha)
     cursor.execute("SELECT id, perfil FROM usuarios WHERE username = %s AND senha = %s", (username, senha_hash))
     usuario = cursor.fetchone()
     if usuario:
-        print(f"Bem-vindo(a), {username}!")
         return {'id': usuario[0], 'perfil': usuario[1]}
     else:
-        print("Credenciais inválidas. Tente novamente.")
+        messagebox.showerror("Erro", "Credenciais inválidas.")
         return None
     
 #funcão para cadastrar produtos no estoque
 def cadastrar_produto(cursor):
-    print("\n=== Cadastro de Produto ===")
-    nome = input("Nome do produto: ")
+    nome = simpledialog.askstring("Cadastro de Produto", "Nome do produto:")
 
     quantidade = obter_quantidade("Quantidade inicial: ")
 
-    quantidade_minima = obter_quantidade("Quantidade minima: ")
+    quantidade_minima = obter_quantidade("Quantidade mínima: ")
             
-    cursor.execute("INSERT INTO produtos (nome, quantidade, quantidade_minima) VALUES (%s, %s, %s)",
-                   (nome, quantidade, quantidade_minima))
+    cursor.execute(
+        "INSERT INTO produtos (nome, quantidade, quantidade_minima) VALUES (%s, %s, %s)",
+        (nome, quantidade, quantidade_minima)
+    )
     cursor.connection.commit()
-    print(f"Produto '{nome}' cadastro com sucesso!")
+    return f"Produto '{nome}' cadastro com sucesso!"
 
 # Obter quantidade com validacão 
 def obter_quantidade(mensagem):
     while True:
         try:
-            quantidade = int(input(mensagem))
+            quantidade = int(simpledialog.askstring("Quantidade", mensagem))
             if quantidade < 0:
-                print("A quantidade inicial não pode ser negativa")
+                messagebox.showwarning("Erro", "A quantidade não pode ser negativa.")
                 continue
             return quantidade
         except ValueError:
-            print("Por favor, insira um número válido para a quantidade")
+            messagebox.showwarning("Erro", "Por favor, insira um número válido.")
 
 #Funcão para registrar saída de produtos
 def saida_produtos(cursor):
-    print("\n=== Saída de produto ===")
-    nome = input("Nome do produto para dar saída: ")
+    nome = simpledialog.askstring("Saída de Produto", "Nome do produto:")
     
     #verifica a quantidade em estoque
     cursor.execute("SELECT quantidade, quantidade_minima FROM produtos WHERE nome = %s", (nome,))
     produto = cursor.fetchone()
     
-    if produto is None:
-        print("Produto não encontrado!")
-        return
+    if not produto:
+        raise ValueError("Produto não encontrado.")
     
     quantidade_atual, quantidade_minima = produto
-    print(f"Quantidade atual de '{nome}': {quantidade_atual}")
     
     quantidade_saida = obter_quantidade("Quantidade de saída: ")
     
     if quantidade_saida > quantidade_atual:
-        print("Quantidade insuficiente no estoque para a saída solicitada.")
-        return
+        raise ValueError("Quantidade insuficiente no estoque para a saída solicitada.")
         
     nova_quantidade = quantidade_atual - quantidade_saida
     cursor.execute("UPDATE produtos SET quantidade = %s WHERE nome = %s", (nova_quantidade, nome))
     cursor.connection.commit()
-    print(f"Saída de {quantidade_saida} unidades de '{nome}' registrada com sucesso!")
     
     #Exibe alerta se a quantidade estiver abaixo do mínimo
+    alerta = ""
     if nova_quantidade < quantidade_minima:
-        print(f"Quantidade de '{nome}' está abaixo do mínimo permitido.")
+        alerta = f" Estoque abaixo do mínimo permitido."
+    return f"Saída de {quantidade_saida} unidades de '{nome}' registrada com sucesso.{alerta}"
     
    
 #funcão para listar produtos e alertas sobre baixa qualidade
 def listar_produtos(cursor):
-    print("\n=== Produtos em estoque ===")
     cursor.execute("SELECT nome, quantidade, quantidade_minima FROM produtos")
     produtos = cursor.fetchall()
     
     if not produtos:
-        print("Nenhum produto cadastrado no estoque.")
-        return
+        raise ValueError("Nenhum produto cadastrado no estoque.")
     
+    resultado = ""
     for nome, quantidade, quantidade_minima in produtos:
         alerta = " - ALERTA: Estoque baixo!" if quantidade < quantidade_minima else ""
-        print(f"{nome}: {quantidade} unidades (Min: {quantidade_minima}){alerta}")
+        resultado += f"{nome}: {quantidade} unidades (Min: {quantidade_minima}){alerta}"
+    return resultado
 
 #funcão principal do sistema de estoque
 def sistema_estoque():
-    print("Bem-vindo(a) ao sistema de estoque.")
-    
     conexao = criar_conexao()
     if not conexao:
         return
@@ -181,28 +174,24 @@ def sistema_estoque():
     #verificar se há usuários; se não, criar um administrador inicial
     cursor.execute("SELECT COUNT(*) FROM usuarios")
     if cursor.fetchone()[0] == 0:
-        print("Nenhum usuário encontrado. Crie um administrador inicial.")
-        cadastrar_usuario(cursor)
+        interface_grafica(cadastrar_usuario, cursor=cursor)
         
     #Login do usuário
     usuario = None
     while not usuario:
-        usuario = login(cursor)
+        usuario = interface_grafica(login, cursor=cursor)
         
     #verificar se o usuário é administrador
     eh_administrador = usuario['perfil'] == 'administrador'
     
     #Menu de opcões do sistema
     while True:
-        print("\n=== Menu ===")
-        print("\n=== 1. Cadastrar produto ===")
-        print("\n=== 2. Listar produto ===")
-        print("\n=== 3. Saída de produto ===")
+        menu = "=== Menu ===\n1. Cadastrar produto\n2. Listar produtos\n3. Registrar saída de produto\n"
         if eh_administrador:
-            print("\n===4. Cadastrar novo usuário ===")
-        print("=== 0. Sair ===")
+            menu += "4. Cadastrar novo usuário \n"
+        menu += "0. Sair\nEscolha uma opção:"
+        opcao = simpledialog.askstring("Menu", menu)
         
-        opcao = input("Escolha uma opcão: ").strip()
         if opcao == "1":
             interface_grafica(cadastrar_produto, cursor = cursor)
         elif opcao == "2":
@@ -212,10 +201,9 @@ def sistema_estoque():
         elif opcao == "4" and eh_administrador:
             interface_grafica(cadastrar_usuario, cursor = cursor)
         elif opcao == "0":
-            print("Saindo do sistema...")
             break
         else:
-            print("Opcão inválida. Tente novamente.")
+            messagebox.showwarning("Erro", "Opção inválida.")
 
     #Fechar a conexão com o banco de dados
     cursor.close()
