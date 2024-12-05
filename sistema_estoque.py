@@ -19,21 +19,6 @@ def criar_conexao():
         print(f"Erro de conexão: {e}")
         return None
 
-#funcao de interface gráfica
-def interface_grafica(funcao, **kwargs):
-    #criar janela oculta para diálogo
-    root = tk.Tk()
-    root.withdraw() #oculta a janela principal
-    
-    try:
-        resultado = funcao(**kwargs)
-        if resultado:
-            messagebox.showinfo("Sucesso", resultado)
-    except Exception as e:
-        messagebox.showerror("Erro", str(e))
-    finally:
-        root.destroy() #fecha a janela oculta
-
 #funcão para criptografar a senha
 def hash_senha(senha):
     return hashlib.sha256(senha.encode()).hexdigest()
@@ -42,32 +27,37 @@ def hash_senha(senha):
 def cadastrar_usuario(cursor):
     username = simpledialog.askstring("Cadastro", "Nome de usuário:")
     if not username:
-        raise ValueError("Nome de usuário é obrigatório")
+        return "Cadastro cancelado."
     
     senha = obter_senha()
+    if not senha:
+        return "Cadastro cancelado."
+    
     perfil = obter_perfil()
     senha_hash = hash_senha(senha)
 
     try:
         cursor.execute("INSERT INTO usuarios (username, senha, perfil) VALUES (%s, %s, %s )", (username, senha_hash, perfil))
         cursor.connection.commit()
-        print("Usuário cadastrado com sucesso!")
+        return f"Usuário '{username}' cadastrado com sucesso!"
     except mysql.connector.Error as e:
-        print(f"Erro ao cadastrar usuário: {e}")
+        raise ValueError(f"Erro ao cadastrar usuário: {e}")
         
 def obter_senha():
     #validacão de senha
     while True:
-        senha = simpledialog.askstring("Cadastro", "Senha:", show="*")
-        confirmar_senha = simpledialog.askstring("Cadastro", "Confirme a senha:", show="*")
+        senha = simpledialog.askstring("Senha", "Digite a senha (4 caracteres, 1 número):", show="*")
+        if not senha:
+            return None
+        confirmar_senha = simpledialog.askstring("Senha", "Confirme a senha:", show="*")
         
         #verifica se as senhas coincidem.
         if senha != confirmar_senha:
-            print("As senhas não coincidem. Tente novamente")
+            messagebox.showerror("Erro", "As senhas não coincidem. Tente novamente.")
             continue
         #verifica se a senha tem 4 caracteres
         if len(senha) != 4 or not any(char.isdigit() for char in senha):
-            messagebox.showwarning("A senha deve ter 4 caracteres, tente novamente!")
+            messagebox.showerror("Erro", "A senha deve ter 4 caracteres e conter pelo menos um número.")
             continue
         return senha
     
@@ -78,51 +68,61 @@ def obter_perfil():
         if perfil in ['administrador', 'comum']:
             return perfil
         else:
-            messagebox.showwarning("Erro", "Perfil inválido. Digite 'administrador' ou 'comum'.")
-
-#funcão para realizar login do usuário
-def login(cursor):
-    username = simpledialog.askstring("Login", "Usuário:")
-    senha = simpledialog.askstring("Login", "Senha:", show="*")
-    senha_hash = hash_senha(senha)
-    cursor.execute("SELECT id, perfil FROM usuarios WHERE username = %s AND senha = %s", (username, senha_hash))
-    usuario = cursor.fetchone()
-    if usuario:
-        return {'id': usuario[0], 'perfil': usuario[1]}
-    else:
-        messagebox.showerror("Erro", "Credenciais inválidas.")
-        return None
+            messagebox.showerror("Erro", "Perfil inválido. Digite 'administrador' ou 'comum'.")
     
 #funcão para cadastrar produtos no estoque
 def cadastrar_produto(cursor):
     nome = simpledialog.askstring("Cadastro de Produto", "Nome do produto:")
+    if not nome:
+        return "Cadastro cancelado."
 
     quantidade = obter_quantidade("Quantidade inicial: ")
 
     quantidade_minima = obter_quantidade("Quantidade mínima: ")
-            
-    cursor.execute(
-        "INSERT INTO produtos (nome, quantidade, quantidade_minima) VALUES (%s, %s, %s)",
-        (nome, quantidade, quantidade_minima)
-    )
-    cursor.connection.commit()
-    return f"Produto '{nome}' cadastro com sucesso!"
-
+    
+    try:        
+        cursor.execute(
+            "INSERT INTO produtos (nome, quantidade, quantidade_minima) VALUES (%s, %s, %s)",
+            (nome, quantidade, quantidade_minima)
+        )
+        cursor.connection.commit()
+        return f"Produto '{nome}' cadastro com sucesso!"
+    except mysql.connector.Error as e:
+        raise ValueError(f"Erro ao cadastrar produto: {e}")
+    
 # Obter quantidade com validacão 
 def obter_quantidade(mensagem):
     while True:
         try:
             quantidade = int(simpledialog.askstring("Quantidade", mensagem))
+            if quantidade is None:
+                return None
             if quantidade < 0:
-                messagebox.showwarning("Erro", "A quantidade não pode ser negativa.")
+                messagebox.showerror("Erro", "A quantidade não pode ser negativa.")
                 continue
             return quantidade
         except ValueError:
-            messagebox.showwarning("Erro", "Por favor, insira um número válido.")
+            messagebox.showerror("Erro", "Insira um número válido.")
+
+#funcão para listar produtos e alertas sobre baixa qualidade
+def listar_produtos(cursor):
+    cursor.execute("SELECT nome, quantidade, quantidade_minima FROM produtos")
+    produtos = cursor.fetchall()
+    
+    if not produtos:
+        return "Nenhum produto cadastrado."
+    
+    resultado = ""
+    for nome, quantidade, quantidade_minima in produtos:
+        alerta = " - ALERTA: Estoque baixo!" if quantidade < quantidade_minima else ""
+        resultado += f"{nome}: {quantidade} unidades (Min: {quantidade_minima}){alerta}"
+    return resultado
 
 #Funcão para registrar saída de produtos
 def saida_produtos(cursor):
     nome = simpledialog.askstring("Saída de Produto", "Nome do produto:")
+    if not nome:
+        return "Saída cancelada."
     
     #verifica a quantidade em estoque
     cursor.execute("SELECT quantidade, quantidade_minima FROM produtos WHERE nome = %s", (nome,))
@@ -134,9 +134,11 @@ def saida_produtos(cursor):
     quantidade_atual, quantidade_minima = produto
     
     quantidade_saida = obter_quantidade("Quantidade de saída: ")
+    if not quantidade_saida:
+        return "Saída cancelada."
     
     if quantidade_saida > quantidade_atual:
-        raise ValueError("Quantidade insuficiente no estoque para a saída solicitada.")
+        raise ValueError("Quantidade insuficiente no estoque.")
         
     nova_quantidade = quantidade_atual - quantidade_saida
     cursor.execute("UPDATE produtos SET quantidade = %s WHERE nome = %s", (nova_quantidade, nome))
@@ -145,23 +147,8 @@ def saida_produtos(cursor):
     #Exibe alerta se a quantidade estiver abaixo do mínimo
     alerta = ""
     if nova_quantidade < quantidade_minima:
-        alerta = f" Estoque abaixo do mínimo permitido."
+        alerta = " Estoque abaixo do mínimo permitido."
     return f"Saída de {quantidade_saida} unidades de '{nome}' registrada com sucesso.{alerta}"
-    
-   
-#funcão para listar produtos e alertas sobre baixa qualidade
-def listar_produtos(cursor):
-    cursor.execute("SELECT nome, quantidade, quantidade_minima FROM produtos")
-    produtos = cursor.fetchall()
-    
-    if not produtos:
-        raise ValueError("Nenhum produto cadastrado no estoque.")
-    
-    resultado = ""
-    for nome, quantidade, quantidade_minima in produtos:
-        alerta = " - ALERTA: Estoque baixo!" if quantidade < quantidade_minima else ""
-        resultado += f"{nome}: {quantidade} unidades (Min: {quantidade_minima}){alerta}"
-    return resultado
 
 #funcão principal do sistema de estoque
 def sistema_estoque():
@@ -170,42 +157,33 @@ def sistema_estoque():
         return
     
     cursor = conexao.cursor()
-    
-    #verificar se há usuários; se não, criar um administrador inicial
-    cursor.execute("SELECT COUNT(*) FROM usuarios")
-    if cursor.fetchone()[0] == 0:
-        interface_grafica(cadastrar_usuario, cursor=cursor)
-        
-    #Login do usuário
-    usuario = None
-    while not usuario:
-        usuario = interface_grafica(login, cursor=cursor)
-        
-    #verificar se o usuário é administrador
-    eh_administrador = usuario['perfil'] == 'administrador'
+    root = tk.Tk()
+    root.title("Sistema de Estoque")
     
     #Menu de opcões do sistema
-    while True:
-        menu = "=== Menu ===\n1. Cadastrar produto\n2. Listar produtos\n3. Registrar saída de produto\n"
-        if eh_administrador:
-            menu += "4. Cadastrar novo usuário \n"
-        menu += "0. Sair\nEscolha uma opção:"
-        opcao = simpledialog.askstring("Menu", menu)
-        
-        if opcao == "1":
-            interface_grafica(cadastrar_produto, cursor = cursor)
-        elif opcao == "2":
-            interface_grafica(listar_produtos, cursor = cursor)
-        elif opcao == "3":
-            interface_grafica(saida_produtos, cursor = cursor)
-        elif opcao == "4" and eh_administrador:
-            interface_grafica(cadastrar_usuario, cursor = cursor)
-        elif opcao == "0":
-            break
-        else:
-            messagebox.showwarning("Erro", "Opção inválida.")
+    def executar(opcao):
+        try:
+            if opcao == "Cadastrar Produto":
+                mensagem = cadastrar_produto(cursor)
+            elif opcao == "Listar Produtos":
+                mensagem = listar_produtos(cursor)
+            elif opcao == "Registrar Saída":
+                mensagem = saida_produtos(cursor)
+            elif opcao == "Cadastrar Usuário":
+                mensagem = cadastrar_usuario(cursor)
+            elif opcao == "Sair":
+                root.quit()
+                return
+            messagebox.showinfo("Resultado", mensagem)
+        except Exception as e:
+            messagebox.showerror("Erro", str(e))
+
+    botoes = ["Cadastrar Produto", "Listar Produtos", "Registrar Saída", "Cadastrar Usuário", "Sair"]
+    for botao in botoes:
+        tk.Button(root, text=botao, command=lambda b=botao: executar(b)).pack(pady=10)
 
     #Fechar a conexão com o banco de dados
+    root.mainloop()
     cursor.close()
     conexao.close()
     
