@@ -1,8 +1,7 @@
 import mysql.connector
 import hashlib
-from getpass import getpass
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox, ttk
 import os
 
 #configuracão de conexão com o banco de dados
@@ -23,173 +22,238 @@ def criar_conexao():
 def hash_senha(senha):
     return hashlib.sha256(senha.encode()).hexdigest()
 
-#funcão para cadastrar um novo usuário (somente para administradores)
-def cadastrar_usuario(cursor):
-    username = simpledialog.askstring("Cadastro", "Nome de usuário:")
-    if not username:
-        return "Cadastro cancelado."
-    
-    senha = obter_senha()
-    if not senha:
-        return "Cadastro cancelado."
-    
-    perfil = obter_perfil()
-    senha_hash = hash_senha(senha)
+# Classe principal do sistema
+class SistemaEstoque:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Sistema de Estoque")
+        self.root.geometry("600x500")
+        self.conexao = criar_conexao()
+        if not self.conexao:
+            exit()
+        self.cursor = self.conexao.cursor()
+        self.usuario_atual = None
+        self.perfil_atual = None
+        self.tela_login()
 
-    try:
-        cursor.execute("INSERT INTO usuarios (username, senha, perfil) VALUES (%s, %s, %s )", (username, senha_hash, perfil))
-        cursor.connection.commit()
-        return f"Usuário '{username}' cadastrado com sucesso!"
-    except mysql.connector.Error as e:
-        raise ValueError(f"Erro ao cadastrar usuário: {e}")
-        
-def obter_senha():
-    #validacão de senha
-    while True:
-        senha = simpledialog.askstring("Senha", "Digite a senha (4 caracteres, 1 número):", show="*")
-        if not senha:
-            return None
-        confirmar_senha = simpledialog.askstring("Senha", "Confirme a senha:", show="*")
-        
-        #verifica se as senhas coincidem.
-        if senha != confirmar_senha:
-            messagebox.showerror("Erro", "As senhas não coincidem. Tente novamente.")
-            continue
-        #verifica se a senha tem 4 caracteres
-        if len(senha) != 4 or not any(char.isdigit() for char in senha):
-            messagebox.showerror("Erro", "A senha deve ter 4 caracteres e conter pelo menos um número.")
-            continue
-        return senha
-    
-    #solicita o perfil do usuário
-def obter_perfil(): 
-    while True:
-        perfil = simpledialog.askstring("Cadastro", "Perfil (administrador/comum):").strip().lower()
-        if perfil in ['administrador', 'comum']:
-            return perfil
-        else:
-            messagebox.showerror("Erro", "Perfil inválido. Digite 'administrador' ou 'comum'.")
-    
-#funcão para cadastrar produtos no estoque
-def cadastrar_produto(cursor):
-    nome = simpledialog.askstring("Cadastro de Produto", "Nome do produto:")
-    if not nome:
-        return "Cadastro cancelado."
+    # Tela de login
+    def tela_login(self):
+        for widget in self.root.winfo_children():
+            widget.destroy()
 
-    quantidade = obter_quantidade("Quantidade inicial: ")
+        tk.Label(self.root, text="Login", font=("Arial", 16)).pack(pady=20)
 
-    quantidade_minima = obter_quantidade("Quantidade mínima: ")
-    
-    try:        
-        cursor.execute(
-            "INSERT INTO produtos (nome, quantidade, quantidade_minima) VALUES (%s, %s, %s)",
-            (nome, quantidade, quantidade_minima)
+        tk.Label(self.root, text="Usuário:").pack()
+        self.username_var = tk.StringVar()
+        tk.Entry(self.root, textvariable=self.username_var).pack()
+
+        tk.Label(self.root, text="Senha:").pack()
+        self.senha_var = tk.StringVar()
+        tk.Entry(self.root, textvariable=self.senha_var, show="*").pack()
+
+        tk.Button(self.root, text="Entrar", command=self.validar_login).pack(pady=10)
+
+    # Validação de login
+    def validar_login(self):
+        username = self.username_var.get().strip()
+        senha = self.senha_var.get().strip()
+
+        if not username or not senha:
+            messagebox.showerror("Erro", "Preencha todos os campos.")
+            return
+
+        senha_hash = hash_senha(senha)
+        self.cursor.execute(
+            "SELECT username, perfil FROM usuarios WHERE username=%s AND senha=%s",
+            (username, senha_hash)
         )
-        cursor.connection.commit()
-        return f"Produto '{nome}' cadastro com sucesso!"
-    except mysql.connector.Error as e:
-        raise ValueError(f"Erro ao cadastrar produto: {e}")
-    
-# Obter quantidade com validacão 
-def obter_quantidade(mensagem):
-    while True:
-        try:
-            quantidade = int(simpledialog.askstring("Quantidade", mensagem))
-            if quantidade is None:
-                return None
-            if quantidade < 0:
-                messagebox.showerror("Erro", "A quantidade não pode ser negativa.")
-                continue
-            return quantidade
-        except ValueError:
-            messagebox.showerror("Erro", "Insira um número válido.")
+        resultado = self.cursor.fetchone()
 
-#funcão para listar produtos e alertas sobre baixa qualidade
-def listar_produtos(cursor):
-    cursor.execute("SELECT nome, quantidade, quantidade_minima FROM produtos")
-    produtos = cursor.fetchall()
-    
-    if not produtos:
-        return "Nenhum produto cadastrado."
-    
-    resultado = ""
-    for nome, quantidade, quantidade_minima in produtos:
-        alerta = " - ALERTA: Estoque baixo!" if quantidade < quantidade_minima else ""
-        resultado += f"{nome}: {quantidade} unidades (Min: {quantidade_minima}){alerta}"
-    return resultado
+        if resultado:
+            self.usuario_atual, self.perfil_atual = resultado
+            self.tela_principal()
+        else:
+            messagebox.showerror("Erro", "Usuário ou senha inválidos.")
 
-#Funcão para registrar saída de produtos
-def saida_produtos(cursor):
-    nome = simpledialog.askstring("Saída de Produto", "Nome do produto:")
-    if not nome:
-        return "Saída cancelada."
-    
-    #verifica a quantidade em estoque
-    cursor.execute("SELECT quantidade, quantidade_minima FROM produtos WHERE nome = %s", (nome,))
-    produto = cursor.fetchone()
-    
-    if not produto:
-        raise ValueError("Produto não encontrado.")
-    
-    quantidade_atual, quantidade_minima = produto
-    
-    quantidade_saida = obter_quantidade("Quantidade de saída: ")
-    if not quantidade_saida:
-        return "Saída cancelada."
-    
-    if quantidade_saida > quantidade_atual:
-        raise ValueError("Quantidade insuficiente no estoque.")
-        
-    nova_quantidade = quantidade_atual - quantidade_saida
-    cursor.execute("UPDATE produtos SET quantidade = %s WHERE nome = %s", (nova_quantidade, nome))
-    cursor.connection.commit()
-    
-    #Exibe alerta se a quantidade estiver abaixo do mínimo
-    alerta = ""
-    if nova_quantidade < quantidade_minima:
-        alerta = " Estoque abaixo do mínimo permitido."
-    return f"Saída de {quantidade_saida} unidades de '{nome}' registrada com sucesso.{alerta}"
+    # Tela principal
+    def tela_principal(self):
+        for widget in self.root.winfo_children():
+            widget.destroy()
 
-#funcão principal do sistema de estoque
-def sistema_estoque():
-    conexao = criar_conexao()
-    if not conexao:
-        return
-    
-    cursor = conexao.cursor()
-    root = tk.Tk()
-    root.title("Sistema de Estoque")
-    
-    #Menu de opcões do sistema
-    def executar(opcao):
-        try:
-            if opcao == "Cadastrar Produto":
-                mensagem = cadastrar_produto(cursor)
-            elif opcao == "Listar Produtos":
-                mensagem = listar_produtos(cursor)
-            elif opcao == "Registrar Saída":
-                mensagem = saida_produtos(cursor)
-            elif opcao == "Cadastrar Usuário":
-                mensagem = cadastrar_usuario(cursor)
-            elif opcao == "Sair":
-                root.quit()
+        tk.Label(self.root, text=f"Bem-vindo, {self.usuario_atual}", font=("Arial", 16)).pack(pady=10)
+        tk.Button(self.root, text="Cadastrar Produto", command=self.cadastrar_produto).pack(fill="x", padx=20, pady=5)
+        if self.perfil_atual == "administrador":
+            tk.Button(self.root, text="Cadastrar Usuário", command=self.cadastrar_usuario).pack(fill="x", padx=20, pady=5)
+        tk.Button(self.root, text="Listar Produtos", command=self.listar_produtos).pack(fill="x", padx=20, pady=5)
+        tk.Button(self.root, text="Sair", command=self.tela_login).pack(fill="x", padx=20, pady=5)
+
+    # Cadastro de produto
+    def cadastrar_produto(self):
+        janela = tk.Toplevel(self.root)
+        janela.title("Cadastrar Produto")
+
+        tk.Label(janela, text="Nome:").grid(row=0, column=0)
+        nome_var = tk.StringVar()
+        tk.Entry(janela, textvariable=nome_var).grid(row=0, column=1)
+
+        tk.Label(janela, text="Quantidade:").grid(row=1, column=0)
+        quantidade_var = tk.StringVar()
+        tk.Entry(janela, textvariable=quantidade_var).grid(row=1, column=1)
+
+        tk.Label(janela, text="Quantidade Mínima:").grid(row=2, column=0)
+        quantidade_minima_var = tk.StringVar()
+        tk.Entry(janela, textvariable=quantidade_minima_var).grid(row=2, column=1)
+
+        def salvar_produto():
+            nome = nome_var.get().strip()
+            quantidade = quantidade_var.get().strip()
+            quantidade_minima = quantidade_minima_var.get().strip()
+
+            if not nome or not quantidade or not quantidade_minima:
+                messagebox.showerror("Erro", "Preencha todos os campos.")
                 return
-            messagebox.showinfo("Resultado", mensagem)
-        except Exception as e:
-            messagebox.showerror("Erro", str(e))
 
-    botoes = ["Cadastrar Produto", "Listar Produtos", "Registrar Saída", "Cadastrar Usuário", "Sair"]
-    for botao in botoes:
-        tk.Button(root, text=botao, command=lambda b=botao: executar(b)).pack(pady=10)
+            try:
+                quantidade = int(quantidade)
+                quantidade_minima = int(quantidade_minima)
+                if quantidade < 0 or quantidade_minima < 0:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("Erro", "Quantidades devem ser números positivos.")
+                return
 
-    #Fechar a conexão com o banco de dados
-    root.mainloop()
-    cursor.close()
-    conexao.close()
+            try:
+                self.cursor.execute(
+                    "INSERT INTO produtos (nome, quantidade, quantidade_minima) VALUES (%s, %s, %s)",
+                    (nome, quantidade, quantidade_minima)
+                )
+                self.conexao.commit()
+                messagebox.showinfo("Sucesso", f"Produto '{nome}' cadastrado com sucesso!")
+                janela.destroy()
+            except mysql.connector.Error as e:
+                messagebox.showerror("Erro", f"Erro ao cadastrar produto: {e}")
+
+        tk.Button(janela, text="Salvar", command=salvar_produto).grid(row=3, column=0, columnspan=2, pady=10)
+    # Adicionando função de saída de produtos
+def dar_saida_produto(self):
+    janela = tk.Toplevel(self.root)
+    janela.title("Dar Saída de Produto")
+
+    tk.Label(janela, text="Nome do Produto:").grid(row=0, column=0, padx=10, pady=5)
+    nome_var = tk.StringVar()
+    tk.Entry(janela, textvariable=nome_var).grid(row=0, column=1, padx=10, pady=5)
+
+    tk.Label(janela, text="Quantidade:").grid(row=1, column=0, padx=10, pady=5)
+    quantidade_var = tk.StringVar()
+    tk.Entry(janela, textvariable=quantidade_var).grid(row=1, column=1, padx=10, pady=5)
+
+    def registrar_saida():
+        nome = nome_var.get().strip()
+        quantidade_saida = quantidade_var.get().strip()
+
+        if not nome or not quantidade_saida:
+            messagebox.showerror("Erro", "Preencha todos os campos.")
+            return
+
+        try:
+            quantidade_saida = int(quantidade_saida)
+            if quantidade_saida <= 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Erro", "A quantidade deve ser um número inteiro positivo.")
+            return
+
+        try:
+            self.cursor.execute("SELECT quantidade FROM produtos WHERE nome = %s", (nome,))
+            produto = self.cursor.fetchone()
+
+            if not produto:
+                messagebox.showerror("Erro", "Produto não encontrado.")
+                return
+
+            quantidade_atual = produto[0]
+
+            if quantidade_saida > quantidade_atual:
+                messagebox.showerror("Erro", "Quantidade em estoque insuficiente.")
+                return
+
+            nova_quantidade = quantidade_atual - quantidade_saida
+            self.cursor.execute(
+                "UPDATE produtos SET quantidade = %s WHERE nome = %s",
+                (nova_quantidade, nome)
+            )
+            self.conexao.commit()
+            messagebox.showinfo("Sucesso", f"Saída registrada! Nova quantidade de '{nome}': {nova_quantidade}")
+            janela.destroy()
+        except mysql.connector.Error as e:
+            messagebox.showerror("Erro", f"Erro ao registrar saída: {e}")
+
+    tk.Button(janela, text="Registrar Saída", command=registrar_saida).grid(row=2, column=0, columnspan=2, pady=10)
     
-#Executar o sistema
-sistema_estoque()
+    # Cadastro de usuário (somente administrador)
+    def cadastrar_usuario(self):
+        if self.perfil_atual != "administrador":
+            messagebox.showerror("Erro", "Apenas administradores podem cadastrar usuários.")
+            return
 
+        janela = tk.Toplevel(self.root)
+        janela.title("Cadastrar Usuário")
+
+        tk.Label(janela, text="Usuário:").grid(row=0, column=0)
+        username_var = tk.StringVar()
+        tk.Entry(janela, textvariable=username_var).grid(row=0, column=1)
+
+        tk.Label(janela, text="Senha:").grid(row=1, column=0)
+        senha_var = tk.StringVar()
+        tk.Entry(janela, textvariable=senha_var, show="*").grid(row=1, column=1)
+
+        tk.Label(janela, text="Perfil:").grid(row=2, column=0)
+        perfil_var = tk.StringVar(value="comum")
+        ttk.Combobox(janela, textvariable=perfil_var, values=["administrador", "comum"]).grid(row=2, column=1)
+
+        def salvar_usuario():
+            username = username_var.get().strip()
+            senha = senha_var.get().strip()
+            perfil = perfil_var.get()
+
+            if not username or not senha:
+                messagebox.showerror("Erro", "Preencha todos os campos.")
+                return
+
+            senha_hash = hash_senha(senha)
+            try:
+                self.cursor.execute(
+                    "INSERT INTO usuarios (username, senha, perfil) VALUES (%s, %s, %s)",
+                    (username, senha_hash, perfil)
+                )
+                self.conexao.commit()
+                messagebox.showinfo("Sucesso", f"Usuário '{username}' cadastrado com sucesso!")
+                janela.destroy()
+            except mysql.connector.Error as e:
+                messagebox.showerror("Erro", f"Erro ao cadastrar usuário: {e}")
+
+        tk.Button(janela, text="Salvar", command=salvar_usuario).grid(row=3, column=0, columnspan=2, pady=10)
+
+    # Listagem de produtos
+    def listar_produtos(self):
+        janela = tk.Toplevel(self.root)
+        janela.title("Produtos em Estoque")
+
+        texto = tk.Text(janela, wrap="word")
+        texto.pack(expand=True, fill="both")
+
+        self.cursor.execute("SELECT nome, quantidade, quantidade_minima FROM produtos")
+        produtos = self.cursor.fetchall()
+
+        for nome, quantidade, quantidade_minima in produtos:
+            alerta = " - ALERTA: Estoque baixo!" if quantidade < quantidade_minima else ""
+            texto.insert(tk.END, f"{nome}: {quantidade} unidades (Min: {quantidade_minima}){alerta}\n")
+
+# Execução do sistema
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = SistemaEstoque(root)
+    root.mainloop()
             
             
 
