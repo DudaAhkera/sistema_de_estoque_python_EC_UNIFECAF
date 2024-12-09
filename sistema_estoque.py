@@ -80,7 +80,7 @@ class SistemaEstoque:
         for widget in self.root.winfo_children():
             widget.destroy()
 
-        tk.Label(self.root, text=f"Bem-vindo, {self.usuario_atual}", font=("Arial", 16)).pack(pady=10)
+        tk.Label(self.root, text=f"Olá, {self.usuario_atual}", font=("Arial", 16)).pack(pady=10)
         tk.Button(self.root, text="Cadastrar Produto", command=self.cadastrar_produto).pack(fill="x", padx=20, pady=5)
         tk.Button(self.root, text="Listar Produtos", command=self.listar_produtos).pack(fill="x", padx=20, pady=5)
         tk.Button(self.root, text="Dar Saída de Produto", command=self.dar_saida_produto).pack(fill="x", padx=20, pady=5)
