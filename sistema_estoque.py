@@ -84,6 +84,7 @@ class SistemaEstoque:
         tk.Button(self.root, text="Cadastrar Produto", command=self.cadastrar_produto).pack(fill="x", padx=20, pady=5)
         tk.Button(self.root, text="Listar Produtos", command=self.listar_produtos).pack(fill="x", padx=20, pady=5)
         tk.Button(self.root, text="Dar Saída de Produto", command=self.dar_saida_produto).pack(fill="x", padx=20, pady=5)
+        tk.Button(self.root, text="Incluir Quantidade", command=self.incluir_quantidade).pack(fill="x", padx=20, pady=5)
         if self.perfil_atual == "administrador":
             tk.Button(self.root, text="Cadastrar Usuário", command=self.cadastrar_usuario).pack(fill="x", padx=20, pady=5)
             tk.Button(self.root, text="Listar Usuário", command=self.listar_usuarios).pack(fill="x", padx=20, pady=5)
@@ -136,6 +137,7 @@ class SistemaEstoque:
                 messagebox.showerror("Erro", f"Erro ao cadastrar produto: {e}")
 
         tk.Button(janela, text="Salvar", command=salvar_produto).grid(row=3, column=0, columnspan=2, pady=10)
+    
     
     # Adicionando função de saída de produtos
     def dar_saida_produto(self):
@@ -190,6 +192,16 @@ class SistemaEstoque:
                 janela.destroy()
             except mysql.connector.Error as e:
                 messagebox.showerror("Erro", f"Erro ao registrar saída: {e}")
+            
+                # Verificar se a nova quantidade está abaixo do mínimo
+            self.cursor.execute("SELECT quantidade_minima FROM produtos WHERE nome = %s", (nome,))
+            quantidade_minima = self.cursor.fetchone()[0]
+
+            if nova_quantidade < quantidade_minima:
+                messagebox.showwarning("Atenção", f"A quantidade de '{nome}' está abaixo do valor mínimo!")
+
+            messagebox.showinfo("Sucesso", f"Saída registrada! Nova quantidade de '{nome}': {nova_quantidade}")
+            janela.destroy()
 
         tk.Button(janela, text="Registrar Saída", command=registrar_saida).grid(row=2, column=0, columnspan=2, pady=10)
     
@@ -219,6 +231,53 @@ class SistemaEstoque:
                 tree.insert("", "end", values=(nome, quantidade, quantidade_minima))
         except mysql.connector.Error as e:
             messagebox.showerror("Erro", f"Erro ao listar produtos: {e}")
+            
+    def incluir_quantidade(self):
+        janela = tk.Toplevel(self.root)
+        janela.title("Incluir Quantidade")
+
+        # Obter todos os nomes dos produtos do banco de dados
+        self.cursor.execute("SELECT nome FROM produtos")
+        produtos = [produto[0] for produto in self.cursor.fetchall()]
+
+        # Criar um combobox para selecionar o produto
+        label_produto = tk.Label(janela, text="Produto:")
+        label_produto.grid(row=0, column=0, sticky="w")  # Alinha à esquerda
+        produto_var = tk.StringVar()
+        produto_combobox = tk.ttk.Combobox(janela, textvariable=produto_var, values=produtos)
+        produto_combobox.grid(row=0, column=0, columnspan=2)
+
+        # Campo para a quantidade a ser adicionada
+        tk.Label(janela, text="Quantidade a Adicionar:").grid(row=2, column=0, padx=10, pady=5)
+        quantidade_var = tk.StringVar()
+        tk.Entry(janela, textvariable=quantidade_var).grid(row=2, column=1, padx=10, pady=5)
+
+        def adicionar_quantidade():
+            produto = produto_var.get()
+            quantidade = quantidade_var.get()
+
+            if not produto or not quantidade:
+                messagebox.showerror("Erro", "Preencha todos os campos.")
+                return
+
+            try:
+                quantidade = int(quantidade)
+                if quantidade <= 0:
+                    raise ValueError
+            except ValueError:
+                messagebox.showerror("Erro", "A quantidade deve ser um número inteiro positivo.")
+                return
+
+            try:
+                self.cursor.execute("UPDATE produtos SET quantidade = quantidade + %s WHERE nome = %s",
+                                    (quantidade, produto))
+                self.conexao.commit()
+                messagebox.showinfo("Sucesso", f"Quantidade adicionada ao produto '{produto}' com sucesso!")
+                janela.destroy()
+            except mysql.connector.Error as e:
+                messagebox.showerror("Erro", f"Erro ao adicionar quantidade: {e}")
+
+        tk.Button(janela, text="Adicionar", command=adicionar_quantidade).grid(row=3, column=0, columnspan=2, pady=10)
     
     # Cadastro de usuário (somente administrador)
     def cadastrar_usuario(self):
